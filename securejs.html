@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; base-uri 'none'; form-action 'self'"
+  >
+
+  <title>Secure XSS Training Lab</title>
+
+  <style>
+    :root {
+      --bg: #020207;
+      --surface: #0a0a14;
+      --surface-2: #07070f;
+      --line: rgba(255, 255, 255, .07);
+      --ink: #ecebf7;
+      --muted: #8c8aa8;
+      --violet: #8b5cf6;
+      --aqua: #7dd3fc;
+      --ok: #6ee7b7;
+      --bad: #fda4af;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { background: var(--bg); }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.55;
+      background:
+        radial-gradient(ellipse 70% 40% at 50% -10%, rgba(99, 52, 255, .16), transparent 70%),
+        radial-gradient(ellipse 50% 40% at 100% 100%, rgba(217, 70, 239, .07), transparent 70%),
+        var(--bg);
+    }
+
+    /* Sparse, dim starfield (CSS only - no images, CSP friendly) */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background-size: 380px 380px;
+      opacity: .55;
+      background-image:
+        radial-gradient(1px 1px at 30px 50px, #fff, transparent),
+        radial-gradient(1px 1px at 120px 240px, #cfd2ff, transparent),
+        radial-gradient(1px 1px at 210px 120px, #fff, transparent),
+        radial-gradient(1px 1px at 300px 300px, #e3d9ff, transparent),
+        radial-gradient(1.5px 1.5px at 340px 60px, #fff, transparent),
+        radial-gradient(1px 1px at 70px 340px, #cfd2ff, transparent),
+        radial-gradient(1.5px 1.5px at 250px 20px, #bfe9ff, transparent);
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 28px 24px 64px;
+    }
+
+    /* ---------- Top bar ---------- */
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      letter-spacing: -.2px;
+    }
+
+    .orb {
+      position: relative;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 32% 28%, #ddd6fe, #8b5cf6 40%, #2a1680 80%);
+      box-shadow: 0 0 18px rgba(139, 92, 246, .5);
+    }
+
+    .orb::after {
+      content: "";
+      position: absolute;
+      left: -9px;
+      right: -9px;
+      top: calc(50% - 5px);
+      height: 10px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(125, 211, 252, .5);
+      transform: rotate(-18deg);
+    }
+
+    .user {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .avatar {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      font-weight: 600;
+      font-size: 14px;
+      color: #fff;
+      background: linear-gradient(135deg, #4f46e5, #a855f7);
+      box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px rgba(139, 92, 246, .5);
+    }
+
+    .user strong {
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    .logout {
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      text-decoration: none;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, .03);
+      transition: border-color .2s, background .2s;
+    }
+
+    .logout:hover {
+      border-color: rgba(139, 92, 246, .6);
+      background: rgba(139, 92, 246, .12);
+    }
+
+    a:focus-visible,
+    button:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid var(--aqua);
+      outline-offset: 3px;
+    }
+
+    /* ---------- Hero ---------- */
+
+    .hero { padding: 48px 0 30px; }
+
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(30px, 5vw, 44px);
+      font-weight: 600;
+      letter-spacing: -.8px;
+      line-height: 1.1;
+    }
+
+    .notice {
+      display: inline-block;
+      max-width: 62ch;
+      margin: 0;
+      padding: 12px 16px;
+      font-size: 14px;
+      color: #c9c7e6;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--violet);
+      border-radius: 10px;
+      background: rgba(139, 92, 246, .07);
+    }
+
+    /* ---------- Cards ---------- */
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      padding: 26px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(16, 16, 30, .9), var(--surface));
+      box-shadow: 0 20px 50px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .04);
+    }
+
+    .card h2 {
+      margin: 0 0 4px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .card .hint {
+      margin: 0 0 18px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #cfcdea;
+    }
+
+    textarea {
+      display: block;
+      width: 100%;
+      min-height: 110px;
+      padding: 12px 14px;
+      resize: vertical;
+      font: inherit;
+      font-size: 14px;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-2);
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    textarea:hover { border-color: rgba(167, 139, 250, .35); }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--violet);
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, .25);
+    }
+
+    button {
+      margin-top: 12px;
+      padding: 11px 18px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      cursor: pointer;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(120deg, #4f46e5, #8b5cf6);
+      box-shadow: 0 6px 20px rgba(99, 52, 255, .35);
+      transition: transform .2s, filter .2s;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.12);
+    }
+
+    .output {
+      min-height: 56px;
+      margin-top: 16px;
+      padding: 14px;
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: #d7d5f2;
+      border: 1px dashed rgba(255, 255, 255, .12);
+      border-radius: 12px;
+      background: var(--surface-2);
+    }
+
+    .output:empty::before {
+      content: "Output appears here.";
+      color: #5d5b78;
+    }
+
+    .result { margin-top: 20px; }
+
+    /* app.js swaps the class between .success and .warning */
+    #status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+    }
+
+    #status::before {
+      content: "";
+      flex: none;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    #status.success {
+      color: var(--ok);
+      background: rgba(16, 185, 129, .08);
+      border-color: rgba(52, 211, 153, .25);
+    }
+
+    #status.warning {
+      color: var(--bad);
+      background: rgba(244, 63, 94, .09);
+      border-color: rgba(251, 113, 133, .3);
+    }
+
+    @media (max-width: 760px) {
+      .grid { grid-template-columns: 1fr; }
+      .topbar { flex-wrap: wrap; }
+      .hero { padding-top: 34px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="orb" aria-hidden="true"></span>
+        <span>XSS Training Lab</span>
+      </div>
+
+      <div class="user">
+        <span class="avatar" aria-hidden="true"><?= $initial ?></span>
+        <span>Signed in as <strong><?= $username ?></strong></span>
+        <a class="logout" href="logout.php">Log out</a>
+      </div>
+    </header>
+
+    <section class="hero">
+      <h1>Secure XSS Training Lab</h1>
+      <p class="notice">
+        This page treats all user input as text. It does not intentionally execute JavaScript.
+      </p>
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Safe Reflected-Style Output</h2>
+        <p class="hint">Checked when the form is submitted, then shown as plain text.</p>
+
+        <form id="messageForm">
+          <label for="messageInput">Enter a message:</label>
+          <textarea id="messageInput" maxlength="500"></textarea>
+          <button type="submit">Display Message</button>
+        </form>
+
+        <div id="messageOutput" class="output"></div>
+      </section>
+
+      <section class="card">
+        <h2>Safe DOM Output</h2>
+        <p class="hint">Checked when the button is clicked, then written with textContent.</p>
+
+        <label for="domInput">Enter another message:</label>
+        <textarea id="domInput" maxlength="500"></textarea>
+        <button id="domButton" type="button">Display Safely</button>
+
+        <div id="domOutput" class="output"></div>
+      </section>
+    </div>
+
+    <section class="card result">
+      <h2>Validation Result</h2>
+      <p class="hint">The outcome of the most recent check.</p>
+
+      <p id="status" class="success">
+        No input has been submitted yet.
+      </p>
+    </section>
+
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
